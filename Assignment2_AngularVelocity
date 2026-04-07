@@ -1,0 +1,89 @@
+# %%
+import time
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+
+# %%
+# 1. Setup Connection
+client = RemoteAPIClient()
+sim = client.require('sim')
+
+# %%
+# 2. Start Simulation
+sim.startSimulation()
+print("Simulation Started")
+
+# %%
+# 3. Simple Test: Post a message to CoppeliaSim status bar
+sim.addLog(1, "Hello from Python!")
+p3dx = sim.getObject("/PioneerP3DX")
+p3dx_RW = sim.getObject("/PioneerP3DX/rightMotor")
+p3dx_LW = sim.getObject("/PioneerP3DX/leftMotor")
+
+rw = 0.195/2
+rb = 0.381/2
+d = 0.05
+
+dt = 0.01
+x_dot_int = 0.0
+y_dot_int = 0.0
+gamma_int = 0.0
+
+x_odom = []
+y_odom = []
+
+# %%
+try:
+    # 4. Main Loop (Run for 10 seconds)
+    start_time = time.time()
+    elapsed_prev = 0.0
+    while (time.time() - start_time) < 45:
+        
+        # --- STUDENT CODE GOES HERE ---
+        # Example: Print elapsed time
+        elapsed = time.time() - start_time
+        print(f"Running... {elapsed:.1f}s", end="\r")
+
+        dt = elapsed - elapsed_prev
+        elapsed_prev = elapsed
+        
+        #time.sleep(0.1) 
+        wr_vel = sim.getJointTargetVelocity(p3dx_RW)
+        wl_vel = sim.getJointTargetVelocity(p3dx_LW)
+
+        vx = (wr_vel+ wl_vel)*rw/2
+        wx = (wr_vel- wl_vel)*rw/rb
+
+        euler_angle = sim.getObjectOrientation(p3dx, sim.handle_world)
+
+        x_dot = vx*math.cos(euler_angle[2])
+        y_dot = vx*math.sin(euler_angle[2])
+
+        #Pose integration
+        x_dot_int = x_dot_int + x_dot*dt
+        y_dot_int = y_dot_int + y_dot*dt
+        gamma_int = gamma_int + wx*dt
+
+        # Save pose for Plotting
+        x_odom.append(x_dot_int)
+        y_odom.append(y_dot_int)
+
+        sim.addLog(1, f"x_dot:{x_dot:.1f}m/s, y_dot:{y_dot:.1f}m/s, x_int:{x_dot_int:.1f}m, y_int:{y_dot_int:.1f}m, gamma_int:{gamma_int:.1f}rad, dt{dt:.1f}s")
+
+finally:
+    # 5. Stop Simulation safely
+    sim.stopSimulation()
+    print("\nSimulation Stopped")
+
+# Plot the Odometry Data
+plt.figure(figsize=(10,6))
+plt.plot(x_odom, y_odom, '-b', label='Odometry')
+plt.xlabel('X Position (m)')
+plt.ylabel('Y Position (m)')
+plt.title('Robot Path from Odometry')
+plt.legend()
+plt.grid(True)
+plt.show()
